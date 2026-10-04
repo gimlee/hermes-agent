@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "b4894c9d-528c-45dd-9945-994145007383",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "F:\\github\\hermes-agent\\design\\hermes-memory.architecture.json",
+  "output": "F:\\github\\hermes-agent\\design\\hermes-memory.html",
+  "specification": {
+    "sha256": "3a1c29e5321f3f4737bb165d24fd0aa43906b5a1f0783b88e8204fa196a2f7e0",
+    "bytes": 6255
+  },
+  "artifact": {
+    "sha256": "00d6e7c97d87918a3e4cd88c5aaf0ef86166bc1fea42ccabd59a47b30f3695c2",
+    "bytes": 767064
+  }
+}

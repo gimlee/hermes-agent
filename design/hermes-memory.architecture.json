@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Hermes 记忆机制：快照、召回与学习",
+    "locale": "zh-CN",
+    "output": "design/hermes-memory.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/NousResearch/hermes-agent",
+      "revision": "eb7e8620324b32424c06218f6a28094df2e921f8",
+      "provider": "github",
+      "link_mode": "web"
+    }
+  },
+  "components": [
+    {
+      "id": "notes", "type": "database", "label": "MEMORY.md · USER.md",
+      "sublabel": "当前 profile 的 memories/", "pos": [60, 70], "size": [220, 80],
+      "sources": [{"path": "tools/memory_tool.py", "line": 38, "end_line": 40}, {"path": "tools/memory_tool_store.py", "line": 209, "end_line": 212}]
+    },
+    {
+      "id": "manager", "type": "backend", "label": "MemoryManager",
+      "sublabel": "有界召回 / 后台 FIFO 同步", "pos": [440, 70], "size": [220, 80],
+      "sources": [{"path": "agent/memory_manager.py", "line": 447, "end_line": 501}, {"path": "agent/memory_manager.py", "line": 533, "end_line": 590}, {"path": "agent/memory_manager.py", "line": 673, "end_line": 713}]
+    },
+    {
+      "id": "provider", "type": "external", "label": "外部 provider（可选）",
+      "sublabel": "插件负责检索与存储", "pos": [820, 70], "size": [220, 80],
+      "sources": [{"path": "agent/agent_init.py", "line": 1362, "end_line": 1399}, {"path": "agent/memory_provider.py", "line": 116, "end_line": 139}, {"path": "plugins/memory/mem0/__init__.py", "line": 291, "end_line": 323}]
+    },
+    {
+      "id": "native", "type": "backend", "label": "内置记忆读写",
+      "sublabel": "MemoryStore / memory 工具", "pos": [60, 380], "size": [220, 80],
+      "sources": [{"path": "tools/memory_tool_store.py", "line": 133, "end_line": 164}, {"path": "tools/memory_tool_store.py", "line": 245, "end_line": 274}, {"path": "agent/system_prompt.py", "line": 516, "end_line": 541}]
+    },
+    {
+      "id": "agent", "type": "backend", "label": "会话 Agent",
+      "sublabel": "模型调用 / 工具循环", "pos": [440, 380], "size": [220, 80],
+      "sources": [{"path": "agent/agent_init.py", "line": 1323, "end_line": 1402}, {"path": "agent/turn_context.py", "line": 1168, "end_line": 1189}, {"path": "agent/turn_finalizer.py", "line": 746, "end_line": 766}]
+    },
+    {
+      "id": "history", "type": "backend", "label": "会话持久化与检索",
+      "sublabel": "SessionDB / session_search", "pos": [820, 380], "size": [220, 80],
+      "sources": [{"path": "agent/session_persistence.py", "line": 290, "end_line": 300}, {"path": "tools/session_search_tool.py", "line": 354, "end_line": 431}, {"path": "agent/inline_tool_executors.py", "line": 119, "end_line": 139}]
+    },
+    {
+      "id": "skills", "type": "database", "label": "Skills · 程序性经验",
+      "sublabel": "SKILL.md + 支持文件", "pos": [60, 690], "size": [220, 80],
+      "sources": [{"path": "agent/background_review.py", "line": 475, "end_line": 503}, {"path": "tools/skills_tool.py", "line": 573, "end_line": 586}]
+    },
+    {
+      "id": "review", "type": "backend", "label": "后台复盘（条件触发）",
+      "sublabel": "隔离副本 / memory 与 skills", "pos": [440, 690], "size": [220, 80],
+      "sources": [{"path": "agent/turn_context.py", "line": 745, "end_line": 754}, {"path": "agent/background_review.py", "line": 1006, "end_line": 1038}, {"path": "agent/background_review.py", "line": 1114, "end_line": 1118}]
+    },
+    {
+      "id": "db", "type": "database", "label": "state.db · 历史原文",
+      "sublabel": "SQLite / FTS5 / 中文回退", "pos": [820, 690], "size": [220, 80],
+      "sources": [{"path": "hermes_state.py", "line": 188, "end_line": 191}, {"path": "hermes_state_search.py", "line": 1088, "end_line": 1132}, {"path": "hermes_state_search.py", "line": 1191, "end_line": 1218}]
+    }
+  ],
+  "connections": [
+    {"id": "agent-native", "from": "agent", "to": "native", "label": "取快照 / memory", "variant": "emphasis"},
+    {"id": "native-files", "from": "native", "to": "notes", "label": "加载 / 原子写入"},
+    {"id": "agent-manager", "from": "agent", "to": "manager", "label": "启用后回合钩子", "variant": "dashed"},
+    {"id": "manager-provider", "from": "manager", "to": "provider", "label": "召回 / 同步", "variant": "dashed"},
+    {"id": "agent-history", "from": "agent", "to": "history", "label": "落盘 / 按需检索"},
+    {"id": "history-db", "from": "history", "to": "db", "label": "写消息 / 查原文"},
+    {"id": "agent-review", "from": "agent", "to": "review", "label": "回复后周期复盘"},
+    {"id": "review-skills", "from": "review", "to": "skills", "label": "skill_manage"},
+    {"id": "review-native", "from": "review", "to": "native", "label": "受控 memory 写入"}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "精简事实常驻 · 缓存稳定", "items": ["启动读取两份笔记并冻结 system prompt 快照；memory 写入落盘，不修改已缓存前缀。", "新会话读取更新；上下文压缩允许刷新快照。默认上限为 2200 / 1375 字符。"]},
+    {"dot": "violet", "title": "外部召回随回合追加", "items": ["默认只启用内置记忆；memory.provider 配置最多一个外部插件。", "召回放入当前用户消息的 API 副本；api_content 保留发送字节，后续回合原样重放。", "仅完整回合同步；会话边界按 end → switch 顺序执行。"]},
+    {"dot": "emerald", "title": "历史与经验各有归宿", "items": ["session_search 按需查历史消息，不调用 LLM；压缩归档仍可检索。", "后台复盘不写入用户会话；无人工参与的 replace/remove 会进入待审批记录。", "跨任务事实进入长期笔记；任务流程、偏好与纠错进入对应 Skills。"]},
+    {"dot": "slate", "title": "阅读约定与实现边界", "items": ["箭头表示调用或 I/O 请求；返回内容沿调用路径回到 Agent。虚线表示可选插件路径。", "内置笔记按 profile home 共享，不等于按聊天参与者隔离；外部身份映射由插件实现。", "组件来源固定到 eb7e862；存储后端、抽取与一致性保证随 provider 实现变化。"]}
+  ]
+}
