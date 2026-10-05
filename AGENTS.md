@@ -207,7 +207,10 @@ environment. Non-interactive callers run under `scripts/run-in-hermes-env CMD...
 For tests, use the independent test environment in `CONTRIBUTING.md` (or Nix);
 PM activation's `PYTHONPATH` does not survive the test runner's environment scrub.
 `scripts/run_tests.sh` probes `.venv`, then `venv`, then `$HOME/.hermes/hermes-agent/venv`
-(worktrees sharing the main checkout's venv).
+(worktrees sharing the main checkout's venv). **`python scripts/check`** runs every blocking lint
+check CI runs, with CI's pinned tools; run it before pushing (`--install-hook pre-push` runs it on
+every push; re-run it after pulling to refresh the hook). `# noqa` does not waive a ratchet finding:
+use `# health: allow <RULE> -- <why>`.
 
 ## Project Structure
 
@@ -268,11 +271,12 @@ families: `hermes_state.py` (21), `gateway/run.py` (15), `tools/mcp_tool.py` (15
   function so `monkeypatch.setattr(facade, "name", ...)` is the seam; a patch on the defining
   module passes silently. Check the call site's binding before writing a patch target
   (blind repointing to defining modules broke 130+ tests).
-- **Don't recreate god files.** A file passing ~2,000 lines or a function passing ~300 lines /
-  cyclomatic complexity 30 is the signal to split along `<stem>_<topic>` FIRST, in its own
-  commit. New behaviour goes in a new or topical sibling — never appended to a facade.
-- **No `if/elif` ladders ≥ 4 branches keyed on a name/kind** — use a dict/table → handler
-  (`_SLASH_DISPATCH` in `cli.py`, `_command_handler_table` in the gateway are the shape).
+- **Size and complexity are ratcheted per unit** (`scripts/code_health/config.py`): new
+  functions CC ≤ 20, ≤ 300 lines, nesting ≤ 6; files ≤ 2,000 lines; units already over may only
+  go down (a file already past 2,000 lines may not grow: move a function out to offset, or put new
+  tests in a new test file). Split along `<stem>_<topic>` first, in its own
+  commit (moved code keeps its cap and existing findings; a copy is new code); behaviour goes in a sibling,
+  never a facade; name ladders become a dict → handler (`_SLASH_DISPATCH`).
 - **No re-export shims for internal moves** ("keep the old name importable"). Internal paths
   are not API: plugins build on `ctx` and the documented ABCs. The one-time Sep 2026
   decomposition compat layer for external plugins has been removed; never reintroduce one.
@@ -285,17 +289,15 @@ families: `hermes_state.py` (21), `gateway/run.py` (15), `tools/mcp_tool.py` (15
 
 - No "defense-in-depth" wrappers, `try/except: pass` around code that cannot fail, or flags
   nobody sets. Docstrings/comments keep the WHY, cut the WHAT.
-- **Never infer process identity from argv substrings** (`"serve" in cmdline`) — the bug class
-  behind ~10 fleet-update issues (#90778, #87594, #78089, #76129, #91964). Use the canonical
+- **Never infer process identity from argv substrings** (`"serve" in cmdline`; ~10 fleet-update
+  bugs, #90778). Use the canonical
   matchers `gateway.status.looks_like_gateway_command_line` and
   `hermes_cli.update_cmd._hermes_holder_subcommand`; flag sets are DERIVED from the parser
   (`_holder_value_flags()`), never hand-written; match FULL cmdlines and truncate only for
-  display. Details: `hermes_cli/AGENTS.md`.
+  display. Details: `hermes_cli/AGENTS.md`. Ratcheted (HX003).
 - **Never hardcode `~/.hermes`.** `get_hermes_home()` for code paths, `display_hermes_home()`
-  for user-facing text (both from `hermes_constants`). Hardcoding breaks profiles (5 bugs in
-  PR #3575). Profile operations themselves are HOME-anchored
-  (`_get_profiles_root()` = `Path.home()/.hermes/profiles`) so `hermes -p x profile list`
-  sees all profiles — intentional, not a bug.
+  for user-facing text (`hermes_constants`); ratcheted (HX001). `_get_profiles_root()` is
+  HOME-anchored on purpose, so `hermes -p x profile list` sees all profiles.
 - **One process may serve many profiles; code that runs outside a turn binds the owning
   profile scope explicitly.** A profile = home + secret scope + terminal scope, bound by
   `gateway/run.py::_profile_runtime_scope` (turn), `tui_gateway/server.py::@_profile_scoped` +
@@ -308,7 +310,8 @@ families: `hermes_state.py` (21), `gateway/run.py` (15), `tools/mcp_tool.py` (15
   deferred callbacks, RPC methods, config readers, thread hops (`spawn_context_thread`), child
   spawns (`served_profile_child_env`, never `os.environ.copy()`). Fail-closed reads exist only after
   `set_multiplex_active(True)`. Prove live with two homes (A→B→A) under multiplex, not one temp
-  `HERMES_HOME`. Advisory lint: `scripts/check_profile_scope_patterns.py`.
+  `HERMES_HOME`. Ratcheted: HX002/HX004/HX005/HX012, PS-P05/P06; the full shape list is the
+  advisory `scripts/check_profile_scope_patterns.py`.
 - **Machine facts and resource lookup go through `hermes_platform`.** `hermes_platform.host` is the
   one answer for OS family, native architecture (`IsWow64Process2` → `platform.machine()`; never
   `PROCESSOR_ARCHITECTURE` alone, it reads AMD64 under x64-on-ARM64 emulation), CPU identity, and
